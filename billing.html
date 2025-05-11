@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AS Jewellers - Billing</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+  <div class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white shadow-lg p-5">
+      <h2 class="text-xl font-bold mb-8 text-purple-700">AS Jewellers</h2>
+      <nav>
+        <ul class="space-y-4">
+          <li><a href="dashboard.html" class="text-purple-700 hover:text-purple-600">Dashboard</a></li>
+          <li><a href="billing.html" class="text-purple-700 font-bold">Billing</a></li>
+          <li><a href="stock.html" class="text-gray-700 hover:text-purple-600">Stock</a></li>
+          <li><a href="finance.html" class="text-gray-700 hover:text-purple-600">Finance / Gold Loan</a></li>
+          <li><a href="reports.html" class="text-gray-700 hover:text-purple-600">Reports</a></li>
+        </ul>
+      </nav>
+      <img src="frontend\logo.png" style="height: 400px; margin-bottom: 10px; float: left;" />
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-10">
+      <h1 class="text-2xl font-semibold text-gray-800 mb-6">Billing Section</h1>
+
+      <!-- Billing Form -->
+      <form id="billingForm" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-white p-6 rounded shadow">
+        <select id="itemSelect" required class="border p-2 rounded">
+          <option value="">Select Item</option>
+        </select>
+        <input type="number" id="sellQty" placeholder="Quantity" class="border p-2 rounded" required min="1">
+        <input type="number" id="makingCharges" placeholder="Making Charges (₹)" class="border p-2 rounded" min="0">
+        <input type="number" id="stoneCharges" placeholder="Stone Charges (₹)" class="border p-2 rounded" min="0">
+        <button type="submit" class="bg-purple-600 text-white px-4 py-2 rounded col-span-full hover:bg-purple-700">Add to Bill</button>
+      </form>
+
+      <!-- Customer Phone -->
+      <div class="mb-4">
+        <label for="customerPhone" class="block text-sm font-medium text-gray-700">Customer Phone or Name</label>
+        <input type="tel" id="customerPhone" name="customerPhone" required pattern="[0-9]{10}" maxlength="40"
+               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm" />
+      </div>
+
+      <!-- Bill Table -->
+      <div class="bg-white p-6 rounded shadow mb-6 overflow-x-auto">
+        <h2 class="text-xl font-bold text-gray-700 mb-4">Items in Bill</h2>
+        <table class="min-w-full table-auto">
+          <thead>
+            <tr class="bg-gray-200 text-left">
+              <th class="p-2">Item</th>
+              <th class="p-2">Qty</th>
+              <th class="p-2">Price</th>
+              <th class="p-2">Making Charges</th>
+              <th class="p-2">Stone Charges</th>
+              <th class="p-2">Total</th>
+            </tr>
+          </thead>
+          <tbody id="billTableBody"></tbody>
+        </table>
+
+        <!-- Discount and Summary -->
+        <div class="mt-4">
+          <label for="discount" class="block mb-2 font-medium">Discount (%)</label>
+          <input type="number" id="discount" class="border p-2 rounded w-32" min="0" max="100" value="0" oninput="recalculateDiscount()">
+        </div>
+
+        <div class="text-right text-lg mt-4 space-y-2">
+          <div>Subtotal: ₹<span id="subTotal">0</span></div>
+          <div>Discount: ₹<span id="discountAmount">0</span></div>
+          <div>
+            <label for="gstRate" class="block text-sm font-medium text-gray-700">GST (%)</label>
+            <input type="number" id="gstRate" class="border p-2 rounded w-32" min="0" max="100" value="3" oninput="recalculateDiscount()">
+          </div>
+          <div>GST Amount: ₹<span id="gstAmount">0</span></div>
+          <div class="text-xl font-semibold text-gray-800">Final Total: ₹<span id="finalTotal">0</span></div>
+        </div>
+      </div>
+
+      <!-- Final Buttons -->
+      <div class="flex gap-4">
+        <button onclick="finalizeBill()" class="bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700">Finalize & Update Stock</button>
+        <button onclick="printBill()" class="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700">Print Bill</button>
+      </div>
+    </main>
+  </div>
+
+ <!-- Firebase and Stock Logic -->
+  <script type="module">
+  import {
+    initializeApp
+  } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+  import {
+    getFirestore,
+    collection,
+    onSnapshot,
+    setDoc,
+    doc,
+    deleteDoc,
+    getDocs,
+    enableIndexedDbPersistence,
+    addDoc
+  } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDX_sMMeLBZrAjhI-gtVwCmOGXMlDJaTAA",
+    authDomain: "as-jeweller.firebaseapp.com",
+    projectId: "as-jeweller",
+    storageBucket: "as-jeweller.firebasestorage.app",
+    messagingSenderId: "947980281134",
+    appId: "1:947980281134:web:54bba5a906f003392d46bf"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  enableIndexedDbPersistence(db).catch((err) => {
+    console.warn("Offline persistence error:", err.code);
+  });
+
+  const itemSelect = document.getElementById("itemSelect");
+  const stockData = [];
+
+  getDocs(collection(db, "stock"))
+    .then((querySnapshot) => {
+      querySnapshot.forEach((docSnap) => {
+        const item = docSnap.data();
+        stockData.push(item);
+        if (item.quantity > 0) {
+          const option = document.createElement("option");
+          option.value = stockData.length - 1;
+          option.text = `${item.itemName} (${item.quantity} pcs) - ₹${item.price}`;
+          itemSelect.appendChild(option);
+        }
+      });
+    })
+    .catch((error) => {
+      console.error("Error loading stock:", error);
+    });
+
+  async function updateStockInFirestore() {
+    for (let item of stockData) {
+      const ref = doc(db, "stock", item.itemName);
+      await setDoc(ref, item);
+    }
+  }
+
+  window.firestore = {
+    db,
+    stockData,
+    updateStockInFirestore,
+    addDoc,
+    collection
+  };
+</script>
+
+   
+  </script>
+  
+
+  <!-- Billing Logic -->
+  <script>
+    const billingForm = document.getElementById("billingForm");
+    const billTableBody = document.getElementById("billTableBody");
+    const subTotal = document.getElementById("subTotal");
+    const discount = document.getElementById("discount");
+    const discountAmount = document.getElementById("discountAmount");
+    const gstAmount = document.getElementById("gstAmount");
+    const finalTotal = document.getElementById("finalTotal");
+
+    let billItems = [];
+    let currentSubtotal = 0;
+
+    billingForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const index = document.getElementById("itemSelect").value;
+      const qty = parseInt(document.getElementById("sellQty").value);
+      const makingCharges = parseFloat(document.getElementById("makingCharges").value) || 0;
+      const stoneCharges = parseFloat(document.getElementById("stoneCharges").value) || 0;
+      const selectedItem = window.firestore.stockData[index];
+
+      if (!selectedItem || qty > selectedItem.quantity) {
+        alert("Invalid quantity!");
+        return;
+      }
+
+      const baseTotal = qty * selectedItem.price;
+      const totalWithExtras = baseTotal + makingCharges + stoneCharges;
+
+      billItems.push({
+        itemName: selectedItem.itemName,
+        quantity: qty,
+        price: selectedItem.price,
+        makingCharges,
+        stoneCharges,
+        total: totalWithExtras
+      });
+
+      const row = document.createElement("tr");
+      const indexInBill = billItems.length - 1;
+      row.innerHTML = `
+        <td class="p-2">${selectedItem.itemName}</td>
+        <td class="p-2">${qty}</td>
+        <td class="p-2">₹${selectedItem.price}</td>
+        <td class="p-2">₹${makingCharges}</td>
+        <td class="p-2">₹${stoneCharges}</td>
+        <td class="p-2">₹${totalWithExtras.toFixed(2)}</td>
+        <td class="p-2"><button onclick="removeItem(${indexInBill})" class="text-red-500 hover:underline">Remove</button></td>
+      `;
+      billTableBody.appendChild(row);
+
+      currentSubtotal += totalWithExtras;
+      subTotal.innerText = currentSubtotal.toFixed(2);
+      recalculateDiscount();
+
+      window.firestore.stockData[index].quantity -= qty;
+      window.firestore.updateStockInFirestore(); // Update stock in Firestore
+      billingForm.reset();
+    });
+
+    function recalculateDiscount() {
+      const discountValue = parseFloat(discount.value) || 0;
+      const discountAmt = (discountValue / 100) * currentSubtotal;
+      const gstRate = parseFloat(document.getElementById("gstRate").value) || 0;
+      const gstAmt = (gstRate / 100) * (currentSubtotal - discountAmt);
+      const final = currentSubtotal - discountAmt + gstAmt;
+
+      discountAmount.innerText = discountAmt.toFixed(2);
+      gstAmount.innerText = gstAmt.toFixed(2);
+      finalTotal.innerText = final.toFixed(2);
+
+    }
+async function finalizeBill() {
+    if (billItems.length === 0) {
+      alert("Add items to bill before finalizing.");
+      return;
+    }
+
+    try {
+      // Use the existing db variable
+      const customerPhone = document.getElementById("customerPhone").value;
+      const totalAmount = parseFloat(finalTotal.innerText);
+      const date = new Date().toLocaleString();
+
+   const billData = {
+  customerPhone: customerPhone,
+  totalAmount: totalAmount,
+  date: date,
+  items: billItems.map(item => ({
+    itemName: item.itemName,
+    quantity: item.quantity,
+    price: item.price,
+    makingCharges: item.makingCharges,
+    stoneCharges: item.stoneCharges,
+    total: item.total.toFixed(2),
+  }))
+};
+const db = window.firestore.db;
+const docRef = await window.firestore.addDoc(
+  window.firestore.collection(db, "billsfinal"),
+  billData
+);
+
+      // Clear UI after saving
+      billItems = [];
+      currentSubtotal = 0;
+      billTableBody.innerHTML = "";
+      subTotal.innerText = "0";
+      discountAmount.innerText = "0";
+      gstAmount.innerText = "0";
+      finalTotal.innerText = "0";
+      document.getElementById("customerPhone").value = "";
+
+      alert("✅ Bill finalized and saved to Firestore.");
+    } catch (error) {
+      console.error("❌ Error saving bill:", error);
+      alert("Failed to save bill. See console for details.");
+    }
+  }
+
+
+    function printBill() {
+      if (billItems.length === 0) {
+        alert("Nothing to print! Add items first.");
+        return;
+      }
+
+      const customerPhone = document.getElementById("customerPhone").value;
+      let billHTML = `
+        <h2 style="text-align:center;">AS Jewellers - विश्वास की पहचान</h2>
+        <p><strong>Customer Phone/Name:</strong> ${customerPhone}</p>
+        <hr>
+        <table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse: collapse;">
+          <thead>
+            <tr><th>Item</th><th>Qty</th><th>Price</th><th>Making</th><th>Stone</th><th>Total</th></tr>
+          </thead>
+          <tbody>`;
+
+      billItems.forEach(item => {
+        billHTML += `<tr>
+          <td>${item.itemName}</td>
+          <td>${item.quantity}</td>
+          <td>₹${item.price}</td>
+          <td>₹${item.makingCharges}</td>
+          <td>₹${item.stoneCharges}</td>
+          <td>₹${item.total.toFixed(2)}</td>
+        </tr>`;
+      });
+
+      billHTML += `</tbody></table>
+        <p><strong>Subtotal:</strong> ₹${subTotal.innerText}</p>
+        <p><strong>Discount:</strong> ₹${discountAmount.innerText}</p>
+        <p><strong>GST:</strong> ₹${gstAmount.innerText}</p>
+        <p><strong>Final Total:</strong> ₹${finalTotal.innerText}</p>
+        <hr>
+        <div style="text-align: center; margin-top: 20px;">
+          <p><strong>Thank you for choosing AS Jewellers!</strong></p>
+          <p>Visit again. We value your trust. FOR MORE DETAILS CONTACT - 9761444545</p>
+        </div>`;
+
+      const newWindow = window.open("", "_blank");
+      newWindow.document.write(`<html><head><title>AS Jewellers Bill</title></head><body>${billHTML}</body></html>`);
+      newWindow.print();
+      newWindow.close();
+    }
+  </script>
+</body>
+</html>

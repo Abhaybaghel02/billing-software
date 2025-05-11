@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AS Jewellers - Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+  <div class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white shadow-lg p-5">
+      <h2 class="text-xl font-bold mb-8 text-purple-700">AS Jewellers</h2>
+      <nav>
+        <ul class="space-y-4">
+          <li><a href="dashboard.html" class="text-purple-700 font-bold">Dashboard</a></li>
+          <li><a href="billing.html" class="text-gray-700 hover:text-purple-600">Billing</a></li>
+          <li><a href="stock.html" class="text-gray-700 hover:text-purple-600">Stock</a></li>
+          <li><a href="finance.html" class="text-gray-700 hover:text-purple-600">Finance / Gold Loan</a></li>
+          <li><a href="reports.html" class="text-gray-700 hover:text-purple-600">Reports</a></li>
+        </ul>
+      </nav>
+      <img src="frontend/logo.png" style="height: 400px; margin-bottom: 10px; float: left;" />
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-10">
+      <h1 class="text-2xl font-semibold text-gray-800 mb-6">Dashboard</h1>
+
+      <!-- Summary Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <div class="bg-white p-6 rounded shadow">
+          <h2 class="text-lg font-semibold text-gray-700 mb-2">Total Stock Value</h2>
+          <p class="text-2xl text-purple-700 font-bold" id="totalStockValue">₹0</p>
+        </div>
+        <div class="bg-white p-6 rounded shadow">
+          <h2 class="text-lg font-semibold text-gray-700 mb-2">Total Transactions</h2>
+          <p class="text-2xl text-blue-700 font-bold" id="totalTransactions">0</p>
+        </div>
+        <div class="bg-white p-6 rounded shadow">
+          <h2 class="text-lg font-semibold text-gray-700 mb-2">Total Revenue</h2>
+          <p class="text-2xl text-green-700 font-bold" id="totalRevenue">₹0</p>
+        </div>
+        <div class="bg-white p-6 rounded shadow">
+          <h2 class="text-lg font-semibold text-gray-700 mb-2">Today's Sales</h2>
+          <p class="text-xl text-gray-700">Bills: <span id="billsToday">0</span></p>
+          <p class="text-xl text-gray-700">Revenue: ₹<span id="revenueToday">0</span></p>
+        </div>
+      </div>
+
+      <!-- Low Stock Alerts -->
+      <div class="bg-white p-6 rounded shadow">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">Low Stock Alerts</h2>
+        <ul id="lowStockAlerts" class="list-disc pl-5 space-y-1"></ul>
+      </div>
+    </main>
+  </div>
+
+  <!-- Firebase and Dashboard Logic -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+    import { getFirestore, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyDX_sMMeLBZrAjhI-gtVwCmOGXMlDJaTAA",
+      authDomain: "as-jeweller.firebaseapp.com",
+      projectId: "as-jeweller",
+      storageBucket: "as-jeweller.firebasestorage.app",
+      messagingSenderId: "947980281134",
+      appId: "1:947980281134:web:54bba5a906f003392d46bf"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // DOM Elements
+    const totalStockValue = document.getElementById("totalStockValue");
+    const totalTransactions = document.getElementById("totalTransactions");
+    const totalRevenue = document.getElementById("totalRevenue");
+    const billsToday = document.getElementById("billsToday");
+    const revenueToday = document.getElementById("revenueToday");
+    const lowStockAlerts = document.getElementById("lowStockAlerts");
+
+    // Dashboard Data Calculation
+    async function loadDashboardData() {
+      let stockValue = 0;
+      let transactionCount = 0;
+      let revenue = 0;
+      let todayRevenue = 0;
+      let todayBills = 0;
+      const today = new Date().toLocaleDateString();
+
+      // Fetch stock data
+      const stockSnapshot = await getDocs(collection(db, "stock"));
+      stockSnapshot.forEach((doc) => {
+        const item = doc.data();
+        stockValue += item.price * item.quantity;
+
+        // Low stock alert
+        if (item.quantity < 5) {
+          const listItem = document.createElement("li");
+          listItem.textContent = `${item.itemName} - Only ${item.quantity} left`;
+          listItem.className = "text-red-600";
+          lowStockAlerts.appendChild(listItem);
+        }
+      });
+
+      // Fetch transaction data
+      const transactionSnapshot = await getDocs(collection(db, "billsfinal"));
+      transactionSnapshot.forEach((doc) => {
+        const bill = doc.data();
+        transactionCount += 1;
+        revenue += parseFloat(bill.totalAmount);
+
+        // Check if the bill was generated today
+        if (new Date(bill.date).toLocaleDateString() === today) {
+          todayBills += 1;
+          todayRevenue += parseFloat(bill.totalAmount);
+        }
+      });
+
+      // Update UI
+      totalStockValue.textContent = `₹${stockValue.toFixed(2)}`;
+      totalTransactions.textContent = transactionCount;
+      totalRevenue.textContent = `₹${revenue.toFixed(2)}`;
+      billsToday.textContent = todayBills;
+      revenueToday.textContent = `${todayRevenue.toFixed(2)}`;
+    }
+
+    // Real-time updates using Firestore onSnapshot
+    onSnapshot(collection(db, "billsfinal"), loadDashboardData);
+    onSnapshot(collection(db, "stock"), loadDashboardData);
+
+    // Initial load
+    loadDashboardData();
+  </script>
+</body>
+</html>

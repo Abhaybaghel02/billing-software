@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AS Jewellers - Reports</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDX_sMMeLBZrAjhI-gtVwCmOGXMlDJaTAA",
+      authDomain: "as-jeweller.firebaseapp.com",
+      projectId: "as-jeweller",
+      storageBucket: "as-jeweller.firebasestorage.app",
+      messagingSenderId: "947980281134",
+      appId: "1:947980281134:web:54bba5a906f003392d46bf"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    async function loadReports() {
+      const dateFilter = document.getElementById('dateFilter').value;
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const transactionsRef = collection(db, 'billsfinal');
+      const querySnapshot = await getDocs(transactionsRef);
+      const reportTableBody = document.getElementById('reportTableBody');
+      reportTableBody.innerHTML = '';
+
+      querySnapshot.forEach((doc) => {
+        const bill = doc.data();
+        const billDate = new Date(bill.date);
+        let includeBill = false;
+
+        if (dateFilter === 'today') {
+          includeBill = (billDate.toDateString() === startOfDay.toDateString());
+        } else if (dateFilter === 'month') {
+          includeBill = (billDate.getMonth() === today.getMonth() && billDate.getFullYear() === today.getFullYear());
+        } else if (dateFilter === 'all') {
+          includeBill = true;
+        }
+
+        if (includeBill) {
+          bill.items.forEach((item) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td class="p-2">${bill.date}</td>
+              <td class="p-2">${bill.customerPhone}</td>
+              <td class="p-2">${item.itemName}</td>
+              <td class="p-2">${item.quantity}</td>
+            `;
+            reportTableBody.appendChild(row);
+          });
+        }
+      });
+    }
+
+    // Export functions exposed globally
+    window.exportToExcel = function () {
+      const table = document.querySelector('table');
+      const wb = XLSX.utils.table_to_book(table);
+      XLSX.writeFile(wb, 'report.xlsx');
+    };
+
+    window.exportToPDF = function () {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.text("AS Jewellers - Report", 10, 10);
+      const table = document.querySelector('table');
+      const rows = Array.from(table.querySelectorAll('tr')).map(row =>
+        Array.from(row.querySelectorAll('td, th')).map(cell => cell.innerText)
+      );
+      doc.autoTable({ head: [rows[0]], body: rows.slice(1) });
+      doc.save('report.pdf');
+    };
+
+    document.getElementById('dateFilter').addEventListener('change', loadReports);
+    window.addEventListener('DOMContentLoaded', loadReports);
+  </script>
+</head>
+<body class="bg-gray-100 font-sans">
+  <div class="flex min-h-screen">
+    <aside class="w-64 bg-white shadow-lg p-5">
+      <h2 class="text-xl font-bold mb-8 text-purple-700">AS Jewellers</h2>
+      <nav>
+        <ul class="space-y-4">
+          <li><a href="dashboard.html" class="text-gray-700 hover:text-purple-600">Dashboard</a></li>
+          <li><a href="billing.html" class="text-gray-700 hover:text-purple-600">Billing</a></li>
+          <li><a href="stock.html" class="text-gray-700 hover:text-purple-600">Stock</a></li>
+          <li><a href="finance.html" class="text-gray-700 hover:text-purple-600">Finance / Gold Loan</a></li>
+          <li><a href="reports.html" class="text-purple-700 font-bold">Reports</a></li>
+        </ul>
+      </nav>
+    </aside>
+    <main class="flex-1 p-10">
+      <h1 class="text-2xl font-semibold text-gray-800 mb-6">Reports</h1>
+      <div class="mb-4 flex gap-4">
+        <select id="dateFilter" class="border p-2 rounded">
+          <option value="today">Today</option>
+          <option value="month">This Month</option>
+          <option value="all">All Time</option>
+        </select>
+        <button onclick="exportToExcel()" class="bg-green-500 text-white px-4 py-2 rounded">Export to Excel</button>
+        <button onclick="exportToPDF()" class="bg-blue-500 text-white px-4 py-2 rounded">Export to PDF</button>
+      </div>
+      <div class="bg-white p-6 rounded shadow">
+        <table class="min-w-full table-auto">
+          <thead>
+            <tr class="bg-gray-200 text-left">
+              <th class="p-2">Date</th>
+              <th class="p-2">Customer Phone</th>
+              <th class="p-2">Item Name</th>
+              <th class="p-2">Quantity</th>
+            </tr>
+          </thead>
+          <tbody id="reportTableBody"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
